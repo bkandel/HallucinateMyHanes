@@ -1,0 +1,109 @@
+\documentclass{article}
+\title{Simulation of Imaging Data from Comparable Datasets}
+\begin{document}
+We demonstrate here how it is possible to simulate imaging data for a comparable dataset without imaging data.  We first match each subject in the dataset without imaging data to the the closest comparable subject in the dataset with imaging data, and then attach the imaging data from the matched subject to the subject in the first dataset.  In this way, we can approximate what the imaging data would be of subjects that do not have actual imaging data.  In this example, we will use the imaging data from the NKI dataset to simulate imaging measures for the NHANES dataset, and thereby examine the effect of family income (as a ratio of the federal poverty line) on brain data. 
+
+<<analyze, warning=FALSE>>=
+require(visreg)
+load('../data/NHANES.0910.demo.and.hiq.rda')
+names(NHANES.0910.demographics.df)
+# data description at: http://www.cdc.gov/nchs/nhanes/nhanes2009-2010/DEMO_F.htm#SEQN
+# and http://www.cdc.gov/nchs/nhanes/nhanes2009-2010/HIQ_F.htm
+
+DemoKeepVars <- c( 
+    "SEQN" ,                 # unique person identifier (merge variable)
+    "WTINT2YR" ,         # the two-year interview weight
+    "INDFMPIR" ,        # ratio of family income to poverty
+    "SDMVPSU" ,         # primary sampling unit varaible, used in complex design
+    "SDMVSTRA" ,         # strata variable, used in complex design
+    "RIDAGEYR" ,        # person age
+    "RIAGENDR"              # gender 
+    )
+
+QuestionnaireKeepVars <- c( 
+    "SEQN" ,                 # unique person identifier (merge variable)
+    "HIQ011"                 # Covered by health insurance, from
+    # http://www.cdc.gov/nchs/nhanes/nhanes2009-2010/HIQ_F.htm#HIQ011
+  )
+
+BMIKeepVars <- c('SEQN', 
+                 'BMXWT', # weight
+                 'BMXBMI' # bmi
+                 )
+nhanes.demog <-
+  NHANES.0910.demographics.df[ , DemoKeepVars ]
+
+nhanes.hiq <-
+  NHANES.0910.HIQ_F.df[ , QuestionnaireKeepVars ]
+nhanes.bmi <- NHANES.0910.BMX_F.df[, BMIKeepVars]
+nhanes.merge <- merge(nhanes.demog, nhanes.bmi, by='SEQN')
+nhanes.merge <- merge(nhanes.merge, nhanes.hiq, by='SEQN')
+
+nki <- read.csv('../data/nki.csv')
+nki.img <- read.csv('../data/labelresultsN.csv')
+names(nki.img)[1] <- 'Subject'
+nki.merge <- merge(nki, nki.img, by='Subject')
+age.mean <- mean(c(nki.merge$Age, nhanes.demog$RIDAGEYR))
+age.sd <- sd(c(nki.merge$Age, nhanes.demog$RIDAGEYR))
+weight.mean <- mean(c(nki.merge$Weight, nhanes.merge$BMXWT), na.rm=T)
+weight.sd <- sd(c(nki.merge$Weight, nhanes.merge$BMXWT), na.rm=T)
+nhanes.merge <- cbind(nhanes.merge, 
+  data.frame(AgeScaled=((nhanes.merge$RIDAGEYR-age.mean) / age.sd), 
+              WeightScaled=((nhanes.merge$BMXWT-weight.mean)/weight.sd)))
+nki.merge <-cbind(nki.merge, 
+  data.frame(AgeScaled=((nki.merge$Age - age.mean)/age.sd), 
+             WeightScaled=((nki.merge$Weight-weight.mean)/weight.sd)))
+mydist <- abs(outer(nki.merge$AgeScaled, nhanes.merge$AgeScaled, '-')) + 
+  abs(outer(nki.merge$WeightScaled, nhanes.merge$WeightScaled, '-'))
+rownames(mydist) <- nki.merge$Subject
+colnames(mydist) <- nhanes.merge$SEQN
+nki.imgcols <- (1:dim(nki.merge)[2])[grepl("LABEL", colnames(nki.merge))]
+nhanes.img <- matrix(rep(NA, nrow(nhanes.merge) * length(nki.imgcols)), 
+                     nrow=nrow(nhanes.merge))
+mysubjs <- rep(NA, dim(nhanes.merge)[1])
+nhanes.subjs <- NULL
+for(i in 1:dim(nhanes.merge)[1]){
+  nkisubj <- rownames(mydist)[which(mydist[, i] == 
+                                      min(mydist[, i], na.rm=T))][1] # take 1st match
+  nkisubj <- names(sort(mydist[, i]))[1]
+  mysubjs[i] <- nkisubj
+  nhanes.img[i, ] <- as.numeric(nki.merge[which(nki.merge$Subject == nkisubj), nki.imgcols])
+}
+colnames(nhanes.img) = colnames(nki.merge)[nki.imgcols]
+nhanes.merge <- cbind(nhanes.merge, nhanes.img)
+
+
+### visualize outcomes of label values vs family income (multiples of poverty line)
+mylm <- lm(LABEL_15 ~ INDFMPIR, data=nhanes.merge)
+visreg(mylm) 
+summary(mylm)
+
+# 15, 17, 18, 20 -- all of these have similar effects
+
+@
+
+<<compareDemogs>>=
+
+nhanes.age <- data.frame(Age=nhanes.merge$RIDAGEYR)
+nhanes.age$Group = 'nhanes'
+nki.age <- data.frame(Age=nki.merge$Age)
+nki.age$Group='nki'
+ages <- rbind(nhanes.age, nki.age)
+require(ggplot2)
+ggplot(ages, aes(Age, fill=Group)) + geom_density(alpha=0.3) + 
+  ggtitle('Ages of NKI and NHANES data (years)')
+
+nhanes.weight <- data.frame(Weight=nhanes.merge$BMXWT )
+nhanes.weight$Group = 'nhanes'
+nki.weight <- data.frame(Weight=nki.merge$Weight )
+nki.weight$Group='nki'
+weights <- rbind(nhanes.weight, nki.weight)
+require(ggplot2)
+ggplot(weights, aes(Weight, fill=Group)) + geom_density(alpha=0.3) + 
+  ggtitle('Weights of NKI and NHANES data (kg)')
+
+@
+
+
+
+\end{document}
