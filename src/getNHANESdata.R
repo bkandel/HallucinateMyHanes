@@ -84,6 +84,8 @@ NHANES.0910.HIQ_F.file.location <-
         "ftp://ftp.cdc.gov/pub/Health_Statistics/NCHS/nhanes/2009-2010/HIQ_F.xpt"        # 2009-2010
         
 
+NHANES.0910.BMX_F.file.location <-
+  "ftp://ftp.cdc.gov/pub/Health_Statistics/NCHS/nhanes/2009-2010/BMX_F.xpt"        # 2009-2010
 ##################################################
 # download and import these two data sets into r #
 # since the download and importation of all      #
@@ -129,6 +131,9 @@ NHANES.0910.demographics.df <-
 
 NHANES.0910.HIQ_F.df <-
         download.and.import.any.nhanes.file( NHANES.0910.HIQ_F.file.location )
+
+NHANES.0910.BMX_F.df <- 
+  download.and.import.any.nhanes.file(NHANES.0910.BMX_F.file.location)
         
 
         
@@ -137,7 +142,8 @@ NHANES.0910.HIQ_F.df <-
 save(
         NHANES.0910.demographics.df ,
         NHANES.0910.HIQ_F.df ,
-        file = "NHANES.0910.demo.and.hiq.rda"         # this is the output file name for the two data frames
+        NHANES.0910.BMX_F.df,
+        file = "../data/NHANES.0910.demo.and.hiq.rda"         # this is the output file name for the two data frames
 )
 
 # note that this .rda file will be stored in the local directory specified
